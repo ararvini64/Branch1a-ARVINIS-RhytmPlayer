@@ -21,21 +21,24 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Enable AndroidX & Download Wrapper if Missing
+    - name: Enable AndroidX & Setup Gradle 8
       run: |
         # فعال‌سازی AndroidX
         echo "android.useAndroidX=true" >> gradle.properties
         echo "android.enableJetifier=true" >> gradle.properties
         
-        # در صورتی که فایل jar منتقل نشده باشد، آن را دانلود می‌کند
+        # نصب نسخه سازگار گریدل 8
         mkdir -p gradle/wrapper
-        if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-          curl -sL https://github.com/gradle/gradle/raw/master/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
-        fi
+        curl -sL https://github.com/gradle/gradle/raw/v8.0.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
+        
+        # ساخت فایل gradlew برای استفاده از نسخه 8
+        sudo apt-get update && sudo apt-get install -y gradle
+        gradle wrapper --gradle-version 8.0
+        chmod +x gradlew
 
-    - name: Build APK with Gradle
+    - name: Build APK with Gradle 8
       run: |
-        gradle assembleDebug --no-daemon
+        ./gradlew assembleDebug --no-daemon
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
