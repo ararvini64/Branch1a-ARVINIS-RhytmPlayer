@@ -21,6 +21,13 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
+    # این مرحله فایل‌های مفقودی Gradle را به صورت استاندارد دانلود و آماده می‌کند
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v3
+
+    - name: Generate Wrapper if missing
+      run: gradle wrapper
+
     - name: Make Gradlew Executable
       run: chmod +x gradlew
 
