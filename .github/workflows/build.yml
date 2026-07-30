@@ -21,6 +21,10 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
+    # این بخش فایل‌های گریدلِ مفقود شده را به‌طور خودکار تولید می‌کند
+    - name: Setup Gradle Wrapper
+      run: gradle wrapper
+
     - name: Make Gradlew Executable
       run: chmod +x gradlew
 
