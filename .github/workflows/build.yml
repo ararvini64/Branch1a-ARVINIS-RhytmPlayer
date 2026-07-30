@@ -21,22 +21,22 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Enable AndroidX & Setup Gradle 8
+    - name: Enable AndroidX & Setup Gradle 8.2.1
       run: |
         # فعال‌سازی AndroidX
         echo "android.useAndroidX=true" >> gradle.properties
         echo "android.enableJetifier=true" >> gradle.properties
         
-        # نصب نسخه سازگار گریدل 8
+        # نصب نسخه سازگار گریدل 8.2.1
         mkdir -p gradle/wrapper
-        curl -sL https://github.com/gradle/gradle/raw/v8.0.0/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
+        curl -sL https://github.com/gradle/gradle/raw/v8.2.1/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
         
-        # ساخت فایل gradlew برای استفاده از نسخه 8
+        # ساخت فایل gradlew برای استفاده از نسخه 8.2.1
         sudo apt-get update && sudo apt-get install -y gradle
-        gradle wrapper --gradle-version 8.0
+        gradle wrapper --gradle-version 8.2.1
         chmod +x gradlew
 
-    - name: Build APK with Gradle 8
+    - name: Build APK with Gradle 8.2.1
       run: |
         ./gradlew assembleDebug --no-daemon
 
