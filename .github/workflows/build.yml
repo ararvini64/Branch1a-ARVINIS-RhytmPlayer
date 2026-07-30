@@ -21,12 +21,17 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    # این مرحله فایل‌های مفقودی Gradle را به صورت استاندارد دانلود و آماده می‌کند
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
 
     - name: Generate Wrapper if missing
       run: gradle wrapper
+
+    # این مرحله مطمئن می‌شود فایل gradle.properties با مقادیر لازم حتماً وجود دارد
+    - name: Inject gradle properties
+      run: |
+        echo "android.useAndroidX=true" >> gradle.properties
+        echo "android.enableJetpackCompilationAndIntegrationCheck=true" >> gradle.properties
 
     - name: Make Gradlew Executable
       run: chmod +x gradlew
