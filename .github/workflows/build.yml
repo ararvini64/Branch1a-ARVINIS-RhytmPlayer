@@ -20,23 +20,25 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: gradle
 
-    - name: Find and Build Gradle Project
+    - name: Enable AndroidX & Download Wrapper if Missing
       run: |
-        GRADLEW_PATH=$(find . -name "gradlew" -type f | head -n 1)
-        if [ -z "$GRADLEW_PATH" ]; then
-          echo "فایل gradlew پیدا نشد!"
-          exit 1
+        # فعال‌سازی AndroidX
+        echo "android.useAndroidX=true" >> gradle.properties
+        echo "android.enableJetifier=true" >> gradle.properties
+        
+        # در صورتی که فایل jar منتقل نشده باشد، آن را دانلود می‌کند
+        mkdir -p gradle/wrapper
+        if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+          curl -sL https://github.com/gradle/gradle/raw/master/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
         fi
-        PROJECT_DIR=$(dirname "$GRADLEW_PATH")
-        echo "پروژه در این مسیر پیدا شد: $PROJECT_DIR"
-        cd "$PROJECT_DIR"
-        chmod +x gradlew
-        ./gradlew assembleDebug
+
+    - name: Build APK with Gradle
+      run: |
+        gradle assembleDebug --no-daemon
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: RBNIS-Rhythm-Player-APK
-        path: "**/build/outputs/apk/debug/*.apk"
+        path: app/build/outputs/apk/debug/*.apk
