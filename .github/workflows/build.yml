@@ -21,27 +21,22 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Enable AndroidX & Fix Missing Resources
+    - name: Enable AndroidX & Patch AndroidManifest Theme
       run: |
         # 1. فعال‌سازی AndroidX
         echo "android.useAndroidX=true" >> gradle.properties
         echo "android.enableJetifier=true" >> gradle.properties
 
-        # 2. ساخت آیکون‌های مفقودی ic_launcher و ic_launcher_round به صورت خودکار
+        # 2. ساخت آیکون‌های موقت برای جلوگیری از خطای AAPT
         mkdir -p app/src/main/res/mipmap-hdpi
         cat << 'EOF' > app/src/main/res/mipmap-hdpi/ic_launcher.png
         iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
         EOF
         cp app/src/main/res/mipmap-hdpi/ic_launcher.png app/src/main/res/mipmap-hdpi/ic_launcher_round.png
 
-        # 3. ساخت تم‌های مفقودی سیستم در styles.xml
-        mkdir -p app/src/main/res/values
-        cat << 'EOF' > app/src/main/res/values/styles_fix.xml
-        <?xml version="1.0" encoding="utf-8"?>
-        <resources>
-            <style name="Theme.Material.NoTitleBar" parent="android:Theme.Material.Light.NoActionBar" />
-        </resources>
-        EOF
+        # 3. اصلاح تم ناخوانا در AndroidManifest.xml به تم استاندارد سیستم
+        sed -i 's|android:style/Theme.Material.NoTitleBar|android:style/Theme.Material.Light.NoActionBar|g' app/src/main/AndroidManifest.xml
+        sed -i 's|Theme.Material.NoTitleBar|Theme.Material.Light.NoActionBar|g' app/src/main/AndroidManifest.xml
 
         # 4. آماده‌سازی Gradle 8.2.1
         mkdir -p gradle/wrapper
