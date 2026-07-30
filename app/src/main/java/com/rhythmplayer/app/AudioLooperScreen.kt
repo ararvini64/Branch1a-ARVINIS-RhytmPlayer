@@ -1,5 +1,6 @@
 package com.rhythmplayer.app
 
+import android.content.ContentValues
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
@@ -8,6 +9,10 @@ import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -29,6 +34,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
+import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.max
@@ -38,8 +46,10 @@ class GaplessLoopEngine(private val context: Context) {
 
     private var audioTrack: AudioTrack? = null
     private var pcmData: ByteArray? = null
-    private var sampleRate: Int = 44100
-    private var channelCount: Int = 2
+    var sampleRate: Int = 44100
+        private set
+    var channelCount: Int = 2
+        private set
     var totalDurationMs: Long = 0
         private set
 
@@ -139,23 +149,11 @@ class GaplessLoopEngine(private val context: Context) {
 
     fun playLoop(startMs: Long, endMs: Long) {
         stop()
-        val data = pcmData ?: return
-
-        val bytesPerSample = 2 * channelCount
-        val bytesPerSecond = sampleRate * bytesPerSample
-
-        val startByte = max(0, ((startMs * bytesPerSecond) / 1000).toInt() / bytesPerSample * bytesPerSample)
-        val endByte = min(data.size, ((endMs * bytesPerSecond) / 1000).toInt() / bytesPerSample * bytesPerSample)
-
-        if (endByte <= startByte) return
-
-        val length = endByte - startByte
-        val slicedData = ByteArray(length)
-        System.arraycopy(data, startByte, slicedData, 0, length)
-
+        val slicedData = getSlicedPcmData(startMs, endMs) ?: return
         applyCrossfade(slicedData, sampleRate, channelCount)
 
         val channelConfig = if (channelCount == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
+        val bytesPerSample = 2 * channelCount
 
         audioTrack = AudioTrack.Builder()
             .setAudioAttributes(
@@ -171,13 +169,13 @@ class GaplessLoopEngine(private val context: Context) {
                     .setChannelMask(channelConfig)
                     .build()
             )
-            .setBufferSizeInBytes(length)
+            .setBufferSizeInBytes(slicedData.size)
             .setTransferMode(AudioTrack.MODE_STATIC)
             .build()
 
         audioTrack?.let { track ->
-            track.write(slicedData, 0, length)
-            track.setLoopPoints(0, length / bytesPerSample, -1)
+            track.write(slicedData, 0, slicedData.size)
+            track.setLoopPoints(0, slicedData.size / bytesPerSample, -1)
             track.play()
         }
     }
@@ -190,6 +188,107 @@ class GaplessLoopEngine(private val context: Context) {
             it.release()
         }
         audioTrack = null
+    }
+
+    private fun getSlicedPcmData(startMs: Long, endMs: Long): ByteArray? {
+        val data = pcmData ?: return null
+        val bytesPerSample = 2 * channelCount
+        val bytesPerSecond = sampleRate * bytesPerSample
+
+        val startByte = max(0, ((startMs * bytesPerSecond) / 1000).toInt() / bytesPerSample * bytesPerSample)
+        val endByte = min(data.size, ((endMs * bytesPerSecond) / 1000).toInt() / bytesPerSample * bytesPerSample)
+
+        if (endByte <= startByte) return null
+
+        val length = endByte - startByte
+        val slicedData = ByteArray(length)
+        System.arraycopy(data, startByte, slicedData, 0, length)
+        return slicedData
+    }
+
+    suspend fun saveLoopToFile(startMs: Long, endMs: Long, fileName: String): Boolean = withContext(Dispatchers.IO) {
+        val slicedData = getSlicedPcmData(startMs, endMs) ?: return@withContext false
+        applyCrossfade(slicedData, sampleRate, channelCount)
+
+        val totalAudioLen = slicedData.size.toLong()
+        val totalDataLen = totalAudioLen + 36
+        val longSampleRate = sampleRate.toLong()
+        val channels = channelCount
+        val byteRate = 16 * sampleRate * channels / 8
+
+        val header = ByteArray(44)
+        header[0] = 'R'.code.toByte()
+        header[1] = 'I'.code.toByte()
+        header[2] = 'F'.code.toByte()
+        header[3] = 'F'.code.toByte()
+        header[4] = (totalDataLen and 0xff).toByte()
+        header[5] = (totalDataLen shr 8 and 0xff).toByte()
+        header[6] = (totalDataLen shr 16 and 0xff).toByte()
+        header[7] = (totalDataLen shr 24 and 0xff).toByte()
+        header[8] = 'W'.code.toByte()
+        header[9] = 'A'.code.toByte()
+        header[10] = 'V'.code.toByte()
+        header[11] = 'E'.code.toByte()
+        header[12] = 'f'.code.toByte()
+        header[13] = 'm'.code.toByte()
+        header[14] = 't'.code.toByte()
+        header[15] = ' '.code.toByte()
+        header[16] = 16
+        header[17] = 0
+        header[18] = 0
+        header[19] = 0
+        header[20] = 1
+        header[21] = 0
+        header[22] = channels.toByte()
+        header[23] = 0
+        header[24] = (longSampleRate and 0xff).toByte()
+        header[25] = (longSampleRate shr 8 and 0xff).toByte()
+        header[26] = (longSampleRate shr 16 and 0xff).toByte()
+        header[27] = (longSampleRate shr 24 and 0xff).toByte()
+        header[28] = (byteRate and 0xff).toByte()
+        header[29] = (byteRate shr 8 and 0xff).toByte()
+        header[30] = (byteRate shr 16 and 0xff).toByte()
+        header[31] = (byteRate shr 24 and 0xff).toByte()
+        header[32] = (2 * channels).toByte()
+        header[33] = 0
+        header[34] = 16
+        header[35] = 0
+        header[36] = 'd'.code.toByte()
+        header[37] = 'a'.code.toByte()
+        header[38] = 't'.code.toByte()
+        header[39] = 'a'.code.toByte()
+        header[40] = (totalAudioLen and 0xff).toByte()
+        header[41] = (totalAudioLen shr 8 and 0xff).toByte()
+        header[42] = (totalAudioLen shr 16 and 0xff).toByte()
+        header[43] = (totalAudioLen shr 24 and 0xff).toByte()
+
+        try {
+            val outputStream: OutputStream?
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val resolver = context.contentResolver
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, "$fileName.wav")
+                    put(MediaStore.MediaColumns.MIME_TYPE, "audio/wav")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MUSIC + "/RhythmPlayer")
+                }
+                val audioUri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, contentValues)
+                outputStream = audioUri?.let { resolver.openOutputStream(it) }
+            } else {
+                val musicDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), "RhythmPlayer")
+                if (!musicDir.exists()) musicDir.mkdirs()
+                val file = File(musicDir, "$fileName.wav")
+                outputStream = FileOutputStream(file)
+            }
+
+            outputStream?.use { out ->
+                out.write(header)
+                out.write(slicedData)
+            }
+            return@withContext true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return@withContext false
+        }
     }
 
     private fun applyCrossfade(data: ByteArray, sampleRate: Int, channels: Int) {
@@ -216,10 +315,12 @@ class GaplessLoopEngine(private val context: Context) {
 @Composable
 fun AudioLooperScreen(audioUri: Uri) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val engine = remember { GaplessLoopEngine(context) }
 
     var isLoaded by remember { mutableStateOf(false) }
     var isPlaying by remember { mutableStateOf(false) }
+    var isSaving by remember { mutableStateOf(false) }
     var waveformData by remember { mutableStateOf<List<Float>>(emptyList()) }
 
     var startMs by remember { mutableLongStateOf(0L) }
@@ -318,25 +419,60 @@ fun AudioLooperScreen(audioUri: Uri) {
                 }
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-            Button(
-                onClick = {
-                    if (isPlaying) {
-                        engine.stop()
-                        isPlaying = false
-                    } else {
-                        engine.playLoop(startMs, endMs)
-                        isPlaying = true
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = if (isPlaying) Color(0xFFE53935) else Color(0xFF00ACC1)),
-                shape = RoundedCornerShape(12.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(if (isPlaying) "توقف پخش" else "پخش لوپ بدون مکث", color = Color.White, fontSize = 18.sp)
+                Button(
+                    onClick = {
+                        if (isPlaying) {
+                            engine.stop()
+                            isPlaying = false
+                        } else {
+                            engine.playLoop(startMs, endMs)
+                            isPlaying = true
+                        }
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(54.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = if (isPlaying) Color(0xFFE53935) else Color(0xFF00ACC1)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(if (isPlaying) "توقف" else "پخش لوپ", color = Color.White, fontSize = 16.sp)
+                }
+
+                Button(
+                    onClick = {
+                        if (!isSaving) {
+                            isSaving = true
+                            val defaultName = "Loop_${System.currentTimeMillis()}"
+                            kotlinx.coroutines.GlobalScope.launch(Dispatchers.Main) {
+                                val success = engine.saveLoopToFile(startMs, endMs, defaultName)
+                                isSaving = false
+                                if (success) {
+                                    Toast.makeText(context, "فایل با نام $defaultName ذخیره شد!", Toast.LENGTH_LONG).show()
+                                } else {
+                                    Toast.makeText(context, "خطا در ذخیره‌سازی فایل", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    },
+                    enabled = !isSaving,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(54.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    if (isSaving) {
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                    } else {
+                        Text("ذخیره فایل (WAV)", color = Color.White, fontSize = 16.sp)
+                    }
+                }
             }
         }
     }
@@ -379,7 +515,7 @@ fun InteractiveWaveformDisplay(
     isZoomed: Boolean,
     onSeek: (Long, Long) -> Unit
 ) {
-    var draggingHandle by remember { mutableStateOf<String?>(null) } // "start" or "end"
+    var draggingHandle by remember { mutableStateOf<String?>(null) }
 
     val displayStartMs = if (isZoomed) startMs else 0L
     val displayEndMs = if (isZoomed) endMs else totalMs
@@ -486,7 +622,6 @@ fun InteractiveWaveformDisplay(
             }
         }
 
-        // دستگیره لمسی خط سبز (Start Handle)
         val displayStartX = ((startMs - displayStartMs).toFloat() / displayDuration)
         if (displayStartX in 0f..1f) {
             Box(
@@ -501,7 +636,6 @@ fun InteractiveWaveformDisplay(
             }
         }
 
-        // دستگیره لمسی خط قرمز (End Handle)
         val displayEndX = ((endMs - displayStartMs).toFloat() / displayDuration)
         if (displayEndX in 0f..1f) {
             Box(
