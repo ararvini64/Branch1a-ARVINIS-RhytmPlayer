@@ -21,9 +21,14 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    # این بخش فایل‌های گریدلِ مفقود شده را به‌طور خودکار تولید می‌کند
     - name: Setup Gradle Wrapper
       run: gradle wrapper
+
+    # تنظیم خودکار AndroidX برای رفع خطای اخیر
+    - name: Enable AndroidX
+      run: |
+        echo "android.useAndroidX=true" >> gradle.properties
+        echo "android.enableJetpackCompilationAndIntegrationCheck=true" >> gradle.properties
 
     - name: Make Gradlew Executable
       run: chmod +x gradlew
