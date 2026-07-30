@@ -21,37 +21,11 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Enable AndroidX & Auto-Fix Code Issues
-      run: |
-        # 1. تنظیمات AndroidX
-        echo "android.useAndroidX=true" >> gradle.properties
-        echo "android.enableJetifier=true" >> gradle.properties
-
-        # 2. ساخت آیکون‌ها و منابع مفقودی
-        mkdir -p app/src/main/res/mipmap-hdpi
-        cat << 'EOF' > app/src/main/res/mipmap-hdpi/ic_launcher.png
-        iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
-        EOF
-        cp app/src/main/res/mipmap-hdpi/ic_launcher.png app/src/main/res/mipmap-hdpi/ic_launcher_round.png
-
-        # 3. اصلاح تم در Manifest
-        sed -i 's|android:style/Theme.Material.NoTitleBar|android:style/Theme.Material.Light.NoActionBar|g' app/src/main/AndroidManifest.xml
-        sed -i 's|Theme.Material.NoTitleBar|Theme.Material.Light.NoActionBar|g' app/src/main/AndroidManifest.xml
-
-        # 4. اصلاح خطای کد Kotlin (تبدیل HorizontalDivider به Divider استاندارد)
-        find app/src/main/java -type f -name "*.kt" -exec sed -i 's/HorizontalDivider/Divider/g' {} +
-
-        # 5. آماده‌سازی Gradle 8.2.1
-        mkdir -p gradle/wrapper
-        curl -sL https://github.com/gradle/gradle/raw/v8.2.1/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
-        
-        sudo apt-get update && sudo apt-get install -y gradle
-        gradle wrapper --gradle-version 8.2.1
-        chmod +x gradlew
+    - name: Make Gradlew Executable
+      run: chmod +x gradlew
 
     - name: Build APK
-      run: |
-        ./gradlew assembleDebug --no-daemon
+      run: ./gradlew assembleDebug --no-daemon
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
