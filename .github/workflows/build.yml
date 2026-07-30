@@ -21,22 +21,37 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Enable AndroidX & Setup Gradle 8.2.1
+    - name: Enable AndroidX & Fix Missing Resources
       run: |
-        # فعال‌سازی AndroidX
+        # 1. فعال‌سازی AndroidX
         echo "android.useAndroidX=true" >> gradle.properties
         echo "android.enableJetifier=true" >> gradle.properties
-        
-        # نصب نسخه سازگار گریدل 8.2.1
+
+        # 2. ساخت آیکون‌های مفقودی ic_launcher و ic_launcher_round به صورت خودکار
+        mkdir -p app/src/main/res/mipmap-hdpi
+        cat << 'EOF' > app/src/main/res/mipmap-hdpi/ic_launcher.png
+        iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+        EOF
+        cp app/src/main/res/mipmap-hdpi/ic_launcher.png app/src/main/res/mipmap-hdpi/ic_launcher_round.png
+
+        # 3. ساخت تم‌های مفقودی سیستم در styles.xml
+        mkdir -p app/src/main/res/values
+        cat << 'EOF' > app/src/main/res/values/styles_fix.xml
+        <?xml version="1.0" encoding="utf-8"?>
+        <resources>
+            <style name="Theme.Material.NoTitleBar" parent="android:Theme.Material.Light.NoActionBar" />
+        </resources>
+        EOF
+
+        # 4. آماده‌سازی Gradle 8.2.1
         mkdir -p gradle/wrapper
         curl -sL https://github.com/gradle/gradle/raw/v8.2.1/gradle/wrapper/gradle-wrapper.jar -o gradle/wrapper/gradle-wrapper.jar
         
-        # ساخت فایل gradlew برای استفاده از نسخه 8.2.1
         sudo apt-get update && sudo apt-get install -y gradle
         gradle wrapper --gradle-version 8.2.1
         chmod +x gradlew
 
-    - name: Build APK with Gradle 8.2.1
+    - name: Build APK
       run: |
         ./gradlew assembleDebug --no-daemon
 
