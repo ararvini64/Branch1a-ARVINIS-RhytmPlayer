@@ -21,13 +21,12 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Setup Gradle
-      uses: gradle/actions/setup-gradle@v3
+    # ایجاد فایل‌های اجرایی استاندارد Gradle 8.5 برای جلوگیری از تداخل نسخه‌های جدید
+    - name: Setup Gradle 8.5
+      run: |
+        npm install -g gradle
+        gradle wrapper --gradle-version 8.5
 
-    - name: Generate Wrapper if missing
-      run: gradle wrapper
-
-    # این مرحله مطمئن می‌شود فایل gradle.properties با مقادیر لازم حتماً وجود دارد
     - name: Inject gradle properties
       run: |
         echo "android.useAndroidX=true" >> gradle.properties
