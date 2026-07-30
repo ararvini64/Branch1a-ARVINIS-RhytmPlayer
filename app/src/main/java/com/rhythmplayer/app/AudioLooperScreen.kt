@@ -10,9 +10,12 @@ import android.media.MediaFormat
 import android.net.Uri
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -221,6 +224,7 @@ fun AudioLooperScreen(audioUri: Uri) {
 
     var startMs by remember { mutableLongStateOf(0L) }
     var endMs by remember { mutableLongStateOf(0L) }
+    var isZoomedView by remember { mutableStateOf(false) }
 
     LaunchedEffect(audioUri) {
         isLoaded = false
@@ -242,9 +246,10 @@ fun AudioLooperScreen(audioUri: Uri) {
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF121212))
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("تنظیم لوپ بدون مکث (Zero-Gap)", color = Color.White, fontSize = 20.sp)
 
@@ -252,11 +257,29 @@ fun AudioLooperScreen(audioUri: Uri) {
             CircularProgressIndicator(color = Color.Cyan)
             Text("در حال پردازش و استخراج فایل در RAM...", color = Color.Gray, fontSize = 14.sp)
         } else {
-            WaveformDisplay(
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (isZoomedView) "نمای زوم شده (Focus)" else "نمای کامل فایل",
+                    color = Color.LightGray,
+                    fontSize = 14.sp
+                )
+                FilterChip(
+                    selected = isZoomedView,
+                    onClick = { isZoomedView = !isZoomedView },
+                    label = { Text(if (isZoomedView) "نمایش کل فایل" else "زوم روی محدوده") }
+                )
+            }
+
+            InteractiveWaveformDisplay(
                 waveformData = waveformData,
                 startMs = startMs,
                 endMs = endMs,
                 totalMs = engine.totalDurationMs,
+                isZoomed = isZoomedView,
                 onSeek = { newStart, newEnd ->
                     startMs = newStart
                     endMs = newEnd
@@ -268,15 +291,15 @@ fun AudioLooperScreen(audioUri: Uri) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("شروع: ${startMs}ms", color = Color.Green, fontSize = 14.sp)
-                Text("پایان: ${endMs}ms", color = Color.Red, fontSize = 14.sp)
-                Text("طول لوپ: ${endMs - startMs}ms", color = Color.Yellow, fontSize = 14.sp)
+                Text("شروع: ${startMs}ms", color = Color.Green, fontSize = 13.sp)
+                Text("پایان: ${endMs}ms", color = Color.Red, fontSize = 13.sp)
+                Text("طول لوپ: ${endMs - startMs}ms", color = Color.Yellow, fontSize = 13.sp)
             }
 
-            HorizontalDivider(color = Color.DarkGray)
+            Divider(color = Color.DarkGray, thickness = 1.dp)
 
             FineTuneControls(
-                title = "فاین‌تیون نقطه شروع (Start)",
+                title = "تنظیم دقیق شروع (Start)",
                 color = Color.Green,
                 onAdjust = { delta ->
                     val next = (startMs + delta).coerceIn(0L, endMs - 50L)
@@ -286,7 +309,7 @@ fun AudioLooperScreen(audioUri: Uri) {
             )
 
             FineTuneControls(
-                title = "فاین‌تیون نقطه پایان (End)",
+                title = "تنظیم دقیق پایان (End)",
                 color = Color.Red,
                 onAdjust = { delta ->
                     val next = (endMs + delta).coerceIn(startMs + 50L, engine.totalDurationMs)
@@ -295,7 +318,7 @@ fun AudioLooperScreen(audioUri: Uri) {
                 }
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Button(
                 onClick = {
@@ -309,11 +332,11 @@ fun AudioLooperScreen(audioUri: Uri) {
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = if (isPlaying) Color.Red else Color.Cyan),
+                    .height(54.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = if (isPlaying) Color(0xFFE53935) else Color(0xFF00ACC1)),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text(if (isPlaying) "توقف پخش" else "پخش لوپ بدون مکث", color = Color.Black, fontSize = 18.sp)
+                Text(if (isPlaying) "توقف پخش" else "پخش لوپ بدون مکث", color = Color.White, fontSize = 18.sp)
             }
         }
     }
@@ -322,48 +345,88 @@ fun AudioLooperScreen(audioUri: Uri) {
 @Composable
 fun FineTuneControls(title: String, color: Color, onAdjust: (Long) -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(title, color = color, fontSize = 14.sp)
+        Text(title, color = color, fontSize = 13.sp)
         Spacer(modifier = Modifier.height(4.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { onAdjust(-100) }, colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)) {
-                Text("-100ms")
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Button(onClick = { onAdjust(-500) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C2C2C)), contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text("-500ms", fontSize = 11.sp)
             }
-            Button(onClick = { onAdjust(-10) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)) {
-                Text("-10ms")
+            Button(onClick = { onAdjust(-50) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3D3D3D)), contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text("-50ms", fontSize = 11.sp)
             }
-            Button(onClick = { onAdjust(10) }, colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)) {
-                Text("+10ms")
+            Button(onClick = { onAdjust(-5) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4A4A4A)), contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text("-5ms", fontSize = 11.sp)
             }
-            Button(onClick = { onAdjust(100) }, colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)) {
-                Text("+100ms")
+            Button(onClick = { onAdjust(5) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4A4A4A)), contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text("+5ms", fontSize = 11.sp)
+            }
+            Button(onClick = { onAdjust(50) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3D3D3D)), contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text("+50ms", fontSize = 11.sp)
+            }
+            Button(onClick = { onAdjust(500) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C2C2C)), contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text("+500ms", fontSize = 11.sp)
             }
         }
     }
 }
 
 @Composable
-fun WaveformDisplay(
+fun InteractiveWaveformDisplay(
     waveformData: List<Float>,
     startMs: Long,
     endMs: Long,
     totalMs: Long,
+    isZoomed: Boolean,
     onSeek: (Long, Long) -> Unit
 ) {
+    var draggingHandle by remember { mutableStateOf<String?>(null) } // "start" or "end"
+
+    val displayStartMs = if (isZoomed) startMs else 0L
+    val displayEndMs = if (isZoomed) endMs else totalMs
+    val displayDuration = max(1L, displayEndMs - displayStartMs)
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(120.dp)
+            .height(160.dp)
             .background(Color(0xFF1E1E1E), shape = RoundedCornerShape(8.dp))
-            .pointerInput(totalMs) {
-                detectTapGestures { offset ->
-                    val fraction = offset.x / size.width
-                    val clickedMs = (fraction * totalMs).toLong()
-                    if (Math.abs(clickedMs - startMs) < Math.abs(clickedMs - endMs)) {
-                        onSeek(clickedMs.coerceAtMost(endMs - 50), endMs)
-                    } else {
-                        onSeek(startMs, clickedMs.coerceAtLeast(startMs + 50))
+            .pointerInput(startMs, endMs, totalMs, isZoomed) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        val width = size.width.toFloat()
+                        val startX = ((startMs - displayStartMs).toFloat() / displayDuration) * width
+                        val endX = ((endMs - displayStartMs).toFloat() / displayDuration) * width
+
+                        val touchX = offset.x
+                        val startDist = Math.abs(touchX - startX)
+                        val endDist = Math.abs(touchX - endX)
+
+                        draggingHandle = if (startDist < endDist && startDist < 80f) {
+                            "start"
+                        } else if (endDist < 80f) {
+                            "end"
+                        } else if (touchX < startX) {
+                            "start"
+                        } else {
+                            "end"
+                        }
+                    },
+                    onDragEnd = { draggingHandle = null },
+                    onDragCancel = { draggingHandle = null },
+                    onDrag = { change, _ ->
+                        val width = size.width.toFloat()
+                        val touchX = change.position.x.coerceIn(0f, width)
+                        val draggedMs = displayStartMs + ((touchX / width) * displayDuration).toLong()
+
+                        if (draggingHandle == "start") {
+                            val newStart = draggedMs.coerceIn(0L, endMs - 20L)
+                            onSeek(newStart, endMs)
+                        } else if (draggingHandle == "end") {
+                            val newEnd = draggedMs.coerceIn(startMs + 20L, totalMs)
+                            onSeek(startMs, newEnd)
+                        }
                     }
-                }
+                )
             }
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -372,41 +435,85 @@ fun WaveformDisplay(
             val width = size.width
             val height = size.height
             val centerY = height / 2
-            val barWidth = width / waveformData.size
 
-            waveformData.forEachIndexed { i, amplitude ->
-                val x = i * barWidth
-                val barHeight = amplitude * height
-                drawLine(
-                    color = Color.DarkGray,
-                    start = Offset(x, centerY - barHeight / 2),
-                    end = Offset(x, centerY + barHeight / 2),
-                    strokeWidth = barWidth
+            val startSampleIndex = ((displayStartMs.toFloat() / totalMs) * waveformData.size).toInt().coerceIn(0, waveformData.size - 1)
+            val endSampleIndex = ((displayEndMs.toFloat() / totalMs) * waveformData.size).toInt().coerceIn(startSampleIndex + 1, waveformData.size)
+            val visiblePeaks = waveformData.subList(startSampleIndex, endSampleIndex)
+
+            if (visiblePeaks.isNotEmpty()) {
+                val barWidth = width / visiblePeaks.size
+                visiblePeaks.forEachIndexed { i, amplitude ->
+                    val x = i * barWidth
+                    val barHeight = amplitude * height
+                    drawLine(
+                        color = Color(0xFF555555),
+                        start = Offset(x, centerY - barHeight / 2),
+                        end = Offset(x, centerY + barHeight / 2),
+                        strokeWidth = max(1f, barWidth)
+                    )
+                }
+            }
+
+            val startX = ((startMs - displayStartMs).toFloat() / displayDuration) * width
+            val endX = ((endMs - displayStartMs).toFloat() / displayDuration) * width
+
+            val activeLeft = startX.coerceIn(0f, width)
+            val activeRight = endX.coerceIn(0f, width)
+            if (activeRight > activeLeft) {
+                drawRect(
+                    color = Color.Cyan.copy(alpha = 0.25f),
+                    topLeft = Offset(activeLeft, 0f),
+                    size = Size(activeRight - activeLeft, height)
                 )
             }
 
-            val startX = (startMs.toFloat() / totalMs) * width
-            val endX = (endMs.toFloat() / totalMs) * width
+            if (startX in 0f..width) {
+                drawLine(
+                    color = Color.Green,
+                    start = Offset(startX, 0f),
+                    end = Offset(startX, height),
+                    strokeWidth = 4.dp.toPx()
+                )
+            }
 
-            drawRect(
-                color = Color.Cyan.copy(alpha = 0.2f),
-                topLeft = Offset(startX, 0f),
-                size = Size(endX - startX, height)
-            )
+            if (endX in 0f..width) {
+                drawLine(
+                    color = Color.Red,
+                    start = Offset(endX, 0f),
+                    end = Offset(endX, height),
+                    strokeWidth = 4.dp.toPx()
+                )
+            }
+        }
 
-            drawLine(
-                color = Color.Green,
-                start = Offset(startX, 0f),
-                end = Offset(startX, height),
-                strokeWidth = 4.dp.toPx()
-            )
+        // دستگیره لمسی خط سبز (Start Handle)
+        val displayStartX = ((startMs - displayStartMs).toFloat() / displayDuration)
+        if (displayStartX in 0f..1f) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .offset(x = (displayStartX * 300).dp - 14.dp, y = 4.dp)
+                    .size(28.dp)
+                    .background(Color.Green, shape = CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("S", color = Color.Black, fontSize = 12.sp)
+            }
+        }
 
-            drawLine(
-                color = Color.Red,
-                start = Offset(endX, 0f),
-                end = Offset(endX, height),
-                strokeWidth = 4.dp.toPx()
-            )
+        // دستگیره لمسی خط قرمز (End Handle)
+        val displayEndX = ((endMs - displayStartMs).toFloat() / displayDuration)
+        if (displayEndX in 0f..1f) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .offset(x = (displayEndX * 300).dp - 14.dp, y = (-4).dp)
+                    .size(28.dp)
+                    .background(Color.Red, shape = CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("E", color = Color.White, fontSize = 12.sp)
+            }
         }
     }
 }
